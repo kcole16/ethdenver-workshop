@@ -48,6 +48,20 @@ impl CrossContract {
         ext_guestbook::addMessage(text, &account_id, 0, 1000000000000000000);
     }
 
+    pub fn complex_call(&mut self, account_id: String, text: String) -> Promise {
+        // 1) call status_message to record a message from the signer.
+        // 2) call status_message to retrieve the message of the signer.
+        // 3) return that message as its own result.
+        // Note, for a contract to simply call another contract (1) is sufficient.
+        ext_guestbook::addMessage(text, &account_id, 0, 1000000000000000000).then(
+            ext_guestbook::getMessages(
+                &account_id,
+                0,
+                1000000000000000000,
+            ),
+        )
+    }
+
     // pub fn transfer_money(&mut self, account_id: String, amount: u64) {
     //     Promise::new(account_id).transfer(amount as u128);
     // }
