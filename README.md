@@ -8,6 +8,8 @@
 <br />
 <br />
 
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/kcole16/ethdenver-workshop)
+
 ## Template for NEAR dapps
 ### Requirements
 ##### IMPORTANT: Make sure you have the latest version of NEAR Shell and Node Version > 10.x 
