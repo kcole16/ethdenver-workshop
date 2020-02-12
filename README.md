@@ -10,7 +10,7 @@
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/kcole16/ethdenver-workshop)
 
-## Template for NEAR dapps
+## Messaging app on NEAR with AssemblyScript and Rust
 ### Requirements
 ##### IMPORTANT: Make sure you have the latest version of NEAR Shell and Node Version > 10.x 
 1. node and npm
@@ -22,57 +22,170 @@ npm i -g near-shell
 ```
 npm i -g yarn
 ```
-### To run on NEAR testnet
-#### Step 1: Create account for the contract and deploy the contract.
-You'll now want to authorize NEAR shell on your NEAR account, which will allow NEAR Shell to deploy contracts on your NEAR account's behalf \(and spend your NEAR account balance to do so\).
 
-Type the command `near login` which should return a url:
-
-```bash
-Please navigate to this url and follow the instructions to log in:
-https://wallet.nearprotocol.com/login/?title=NEAR+Shell&public_key={publicKey}
+#### Project Structure
+```
+contracts/
+    assembly/
+        main.ts <-- Main AssemblyScript contract code
+        model.ts <-- Define the types for main.ts 
+        tsconfig.json
+    rust/
+        lib.rs <--- Main Rust contract code
+neardev/
+out/
+src/
+    wallet/
+    config.js <-- Config file
+    index.html <-- Basic layout for your front end
+    main.js <-- wire the logic and js for your app here
+    test.js <-- for you to write tests
+gulpfile.js
+package-lock.json
+package.json
+README.md
 ```
 
-From there enter in your terminal the same account ID that you authorized:
-
-`Please enter the accountId that you logged in with: <asdfasdf>`
-
-Once you have entered your account ID, it will display the following message:
-
-`Missing public key for <asdfasdf> in default`
-`Logged in with masternode24`
-
-This message is not an error, it just means that it will create a public key for you.
-
-#### Step 2:
-Modify src/config.js line that sets the contractName. Set it to id from step 1.
-```javascript
-(function() {
-    const CONTRACT_NAME = 'react-template'; /* TODO: Change this to your contract's name! */
-    const DEFAULT_ENV = 'development';
-    ...
-})();
+#### Writing the AssemblyScript contracts
+Define the message type in `assembly/model.ts`
+```
+export class PostedMessage {
+    sender: string;
+    text: string;
+    premium: boolean;
+  }
 ```
 
-#### Step 3:
-Finally, run the command in your terminal.
+Import the type into `main.ts` along with a persistent data structure and `context`, which provides access to information like `sender`.
 ```
-npm install && npm start
-```
-with yarn:
-```
-yarn install && yarn start
-```
-The server that starts is for static assets and by default serves them to localhost:5000. Navigate there in your browser to see the app running!
+import { context, PersistentVector } from "near-runtime-ts";
 
-### Deploy
-Check the scripts in the package.json, for frontend and backend both, run the command:
-```bash
-npm run(yarn) deploy
+import { PostedMessage } from "./model";
 ```
 
-### To Explore
+Define `messages` and create a new `PersistentVector`, similar to an array, made up of `PostedMessage` objects.
 
-- `assembly/main.ts` for the contract code
-- `src/index.html` for the front-end HTML
-- `src/main.js` for the JavaScript front-end code and how to integrate contracts
+```
+let messages = new PersistentVector<PostedMessage>("m");
+```
+
+Next, let's create a change method `addMessage` to add a new message to `messages` and store the new state.
+
+```
+export function addMessage(text: string): void {
+  // Creating a new message and populating fields with our data
+  let message: PostedMessage = {
+    sender: context.sender,
+    text: text,
+    premium: context.attachedDeposit >= u128.from('100000000000000000000000')
+  };
+  // Adding the message to end of the the persistent collection
+  messages.push(message);
+}
+```
+
+Finally, create a view method `getMessages`, which retrieves and returns the latest state of `messages`
+
+```
+export function getMessages(): Array<PostedMessage> {
+  let numMessages = min(MESSAGE_LIMIT, messages.length);
+  let startIndex = messages.length - numMessages;
+  let result = Array.create<PostedMessage>(numMessages);
+  for (let i = 0; i < numMessages; i++) {
+    result[i] = messages[i + startIndex];
+  }
+  return result;
+}
+```
+
+#### Deploy the AssemblyScript contracts, run the frontend
+```
+npm run dev
+```
+
+#### Write the Rust contracts 
+Setup the contract structure in `rust/lib.rs`
+```
+use borsh::{BorshDeserialize, BorshSerialize};
+use near_bindgen::{
+    env,
+    ext_contract,
+    near_bindgen,
+    Promise,
+};
+use serde_json::json;
+
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+#[near_bindgen]
+#[derive(Default, BorshDeserialize, BorshSerialize)]
+pub struct CrossContract {}
+```
+
+Add the interface of the AssemblyScript contract
+```
+#[ext_contract]
+pub trait ExtGuestbook {
+    fn addMessage(&mut self, text: String);
+    fn getMessages(&self) -> Vec<String>;
+}
+```
+
+Create the contract implementation
+
+```
+#[near_bindgen]
+impl CrossContract {
+}
+```
+
+Inside the implementation, create a function to call the guestbook contract's `addMessage` function
+
+```
+pub fn add_message(&mut self, account_id: String, text: String) {
+    ext_guestbook::addMessage(text, &account_id, 0, 1000000000000000000);
+}
+```
+
+And to add a message, then return the new message state using a promise
+
+```
+pub fn add_and_return_messages(&mut self, account_id: String, text: String) -> Promise {
+    // 1) call guestbook to record a message from the signer.
+    // 2) call guestbook to retrieve all messages.
+    // 3) return messages as the result.
+    ext_guestbook::addMessage(text, &account_id, 0, 1000000000000000000).then(
+        ext_guestbook::getMessages(
+            &account_id,
+            0,
+            1000000000000000000,
+        ),
+    )
+}
+```
+
+#### Step 2: Build and deploy Rust smart contract
+Build the contract
+```
+npm run build:rust
+```
+Create a new master account
+```
+near login
+```
+
+Create an account for the Rust contract
+```
+near create_account <accountId>
+```
+
+Deploy the contract
+```
+near deploy --accountId <accountId> --wasmFile=./rust/res/call_guestbook.wasm --masterAccount <masterAccountName>
+```
+
+#### Step 3: Interacting with the Rust contract
+```
+near call <accountId> add_and_return_messages "{\"account_id\": \"dev-1581444152742\",\"text\":\"yoyoa\"}" --accountId demodenver --gas 10000000000000000000
+```
