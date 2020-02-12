@@ -3,9 +3,9 @@
     "version": "0.0.1",
     "scripts": {
         "build": "npm run build:contract && npm run build:web",
-        "build:contract": "mkdir -p out/ && gulp",
+        "build:contract": "cd contracts/ && mkdir -p out/ && gulp && cd ..",
         "build:web": "parcel build src/index.html --public-url ./",
-        "build:rust": "cd rust/ && ./build.sh && cd ..",
+        "build:rust": "cd contracts/rust/ && ./build.sh && cd .. && cd ..",
         "dev:deploy:contract": "near dev-deploy",
         "deploy:contract": "near deploy",
         "deploy:pages": "gh-pages -d dist/",
