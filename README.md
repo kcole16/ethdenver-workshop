@@ -182,7 +182,7 @@ near create_account <accountId>
 
 Deploy the contract
 ```
-near deploy --accountId <accountId> --wasmFile=./rust/res/call_guestbook.wasm --masterAccount <masterAccountName>
+near deploy --accountId <accountId> --wasmFile=./contracts/rust/res/call_guestbook.wasm --masterAccount <masterAccountName>
 ```
 
 #### Step 3: Interacting with the Rust contract
